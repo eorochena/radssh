@@ -119,7 +119,7 @@ class Chunker(object):
         yield self.data[-1]
 
 
-def connection_worker(host, conn, auth, key_verifier=None, connect_timeout=None):
+def connection_worker(host, conn, auth, key_verifier=None):
     if not conn:
         conn = host
     if isinstance(conn, basestring):
@@ -128,8 +128,7 @@ def connection_worker(host, conn, auth, key_verifier=None, connect_timeout=None)
         else:
             port = 22
         # hostname is a potentially fake label, use conn as actual connection destination
-        s = socket.create_connection((conn, port), timeout=connect_timeout)
-        t = paramiko.Transport(s)
+        t = paramiko.Transport((conn, int(port)))
         t.setName(host)
     elif isinstance(conn, paramiko.Transport):
         # Reuse of established Transport, don't overwrite name
