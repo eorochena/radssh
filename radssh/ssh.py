@@ -146,11 +146,12 @@ def connection_worker(host, conn, auth, key_verifier=None, sshconfig = {}):
             verify_host = sshconfig.get('hostkeyalias', host)
             if not t.is_active():
                 t.start_client()
-            valid = key_verifier.verify_host_key(str(host), t.get_remote_server_key())
+            valid = key_verifier.verify_host_key(str(verify_host), t.get_remote_server_key())
             if not valid:
                 logging.getLogger('radssh').warning('Host failed SSH key validation: %s' % host)
                 raise Exception('Host failed SSH key validation: %s' % host)
     except Exception as e:
+        logging.getLogger('radssh.connect').error('Unable to verify host key for %s\n%s', verify_host, repr(e))
         t.close()
         return t
     # After connection and passing host key verification, now try to authenticate
@@ -334,13 +335,26 @@ class Cluster(object):
         self.output_mode = self.defaults['output_mode']
         self.hkv = HostKeyVerifier(self.defaults['hostkey.verify'],
                                    self.defaults['hostkey.known_hosts'])
+        self.sshconfig = paramiko.SSHConfig()
+        user_config = open(os.path.expanduser('~/.ssh/config'))
+        self.sshconfig.parse(user_config)
+        user_config.close()
+        if os.path.isdir('/etc/ssh'):
+            system_config = open('/etc/ssh/ssh_config')
+        else:
+            # OSX location
+            system_config = open('/etc/ssh_config')
+        self.sshconfig.parse(system_config)
+        system_config.close()
 
         for label, conn in hostlist:
             if mux:
                 for idx, mux_var in enumerate(mux.get(label, [])):
                     mux_label = '%s:%d' % (label, idx)
+                    self.pending[self.dispatcher.submit(connection_worker, mux_label, conn, self.auth, self.hkv, self.sshconfig.lookup(label))] = label
                     self.mux[mux_label] = mux_var
             else:
+                self.pending[self.dispatcher.submit(connection_worker, label, conn, self.auth, self.hkv, self.sshconfig.lookup(label))] = label
         self.update_connections()
         # Start remainder of dispatcher threads
         self.dispatcher.start_threads(len(self.connections))
@@ -443,6 +457,7 @@ class Cluster(object):
             except Exception as e:
                 self.console.message('%s - %s' % (str(k), str(e)), 'EXCEPTION')
 
+            self.pending[self.dispatcher.submit(connection_worker, k, conn, retry, self.hkv, self.sshconfig.lookup(k))] = k
         self.update_connections()
 
     def tunnel_connections(self, hostlist, jumpbox=None):
