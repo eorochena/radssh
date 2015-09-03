@@ -119,16 +119,17 @@ class Chunker(object):
         yield self.data[-1]
 
 
-def connection_worker(host, conn, auth, key_verifier=None):
+def connection_worker(host, conn, auth, key_verifier=None, sshconfig = {}):
     if not conn:
-        conn = host
+        conn = sshconfig.get('hostname', host)
     if isinstance(conn, basestring):
         if ':' in conn:
             conn, port = conn.split(':', 1)
         else:
-            port = 22
+            port = sshconfig.get('port', '22')
         # hostname is a potentially fake label, use conn as actual connection destination
-        t = paramiko.Transport((conn, int(port)))
+        s = socket.create_connection((conn, int(port)), timeout=sshconfig.get('connecttimeout'))
+        t = paramiko.Transport(s)
         t.setName(host)
     elif isinstance(conn, paramiko.Transport):
         # Reuse of established Transport, don't overwrite name
@@ -142,6 +143,7 @@ def connection_worker(host, conn, auth, key_verifier=None):
     t.set_log_channel('radssh.paramiko')
     try:
         if key_verifier:
+            verify_host = sshconfig.get('hostkeyalias', host)
             if not t.is_active():
                 t.start_client()
             valid = key_verifier.verify_host_key(str(host), t.get_remote_server_key())
@@ -149,11 +151,7 @@ def connection_worker(host, conn, auth, key_verifier=None):
                 logging.getLogger('radssh').warning('Host failed SSH key validation: %s' % host)
                 raise Exception('Host failed SSH key validation: %s' % host)
     except Exception as e:
-        logging.getLogger('radssh').error('Unable to verify host key for %s\n%s', host, repr(e))
-        print('Unable to verify host key for', host)
-        print(repr(e))
         t.close()
-        print('Connection to %s closed.' % str(host))
         return t
     # After connection and passing host key verification, now try to authenticate
     auth.authenticate(t)
@@ -341,10 +339,8 @@ class Cluster(object):
             if mux:
                 for idx, mux_var in enumerate(mux.get(label, [])):
                     mux_label = '%s:%d' % (label, idx)
-                    self.pending[self.dispatcher.submit(connection_worker, mux_label, conn, self.auth, self.hkv)] = label
                     self.mux[mux_label] = mux_var
             else:
-                self.pending[self.dispatcher.submit(connection_worker, label, conn, self.auth, self.hkv)] = label
         self.update_connections()
         # Start remainder of dispatcher threads
         self.dispatcher.start_threads(len(self.connections))
@@ -447,7 +443,6 @@ class Cluster(object):
             except Exception as e:
                 self.console.message('%s - %s' % (str(k), str(e)), 'EXCEPTION')
 
-            self.pending[self.dispatcher.submit(connection_worker, k, conn, retry, self.hkv)] = k
         self.update_connections()
 
     def tunnel_connections(self, hostlist, jumpbox=None):

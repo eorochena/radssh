@@ -400,7 +400,7 @@ def radssh_shell_main():
                         hosts.append((label, host))
                 break
         if not expanded:
-            hosts.append((arg, arg))
+            hosts.append((arg, None))
 
     # Almost done with all the preliminary setup steps...
     if defaults['loglevel'] not in ('CRITICAL', 'ERROR'):
