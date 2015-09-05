@@ -155,7 +155,7 @@ def connection_worker(host, conn, auth, key_verifier=None, sshconfig = {}):
         t.close()
         return t
     # After connection and passing host key verification, now try to authenticate
-    auth.authenticate(t)
+    auth.authenticate(t, sshconfig)
     return t
 
 
