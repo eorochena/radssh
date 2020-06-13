@@ -39,7 +39,6 @@ default_config = '''
 #
 # loglevel can be set to [CRITICAL|ERROR|WARNING|INFO|DEBUG]
 loglevel=ERROR
-
 shell.prompt=RadSSH $
 shell.console=color
 # To see last few lines of output of in-flight jobs when pressing Ctrl-C
@@ -126,6 +125,10 @@ force_tty=Cisco,force10networks
 # to permit session to behave as RadSSH expects, without user input...
 force_tty.signon=term length 0
 force_tty.signoff=term length 20
+
+# Configuration option for 'auto_tty' to enable launching directly into *tty 
+# mode when the connected cluster consists of a single host. 
+auto_tty=on
 
 # Should RadSSH initially send auth_none request (needed for OpenSSH 4.3 banner)
 try_auth_none=off
